@@ -1,74 +1,89 @@
-# Quizambig Phase 1 — Deterministic Quiz Model
+# Quizambig Phase 2 — Player Submission and Answer Protection
 
-This phase establishes the persistent state and lifecycle before adding
-GenLayer semantic evaluation.
+Phase 2 adds the authoritative player/question flow while keeping semantic
+evaluation for Phase 3.
 
-## Implemented model
+## Commitment format
 
-### Quiz
-- Quiz Master
-- optional title
-- optional description
-- required question count
-- overall duration in seconds
-- creation timestamp
-- publication timestamp
-- lifecycle status
+The Quiz Master creates a commitment off-chain:
 
-### Question
-- question text
-- protected answer commitment
-- master-answer length
-- evaluation criteria
-- automatic time
-- optional custom time
-- final time
-- lifecycle status
+SHA-256(UTF-8(answer + ":" + salt))
 
-## Timing
+The contract stores only the 64-character lowercase hexadecimal digest.
 
-Prototype rule:
+The plaintext master answer is not stored while the question is active.
 
-`automatic_time = master_answer_length`
+## Player flow
 
-This is a temporary, explicit prototype formula. It is **not** the final
-production timing formula.
+PUBLISHED
+-> join_quiz()
+-> ACTIVE
+-> start_question()
+-> submit_answer()
+-> close_question()
+-> reveal_master_answer()
 
-If a custom time is supplied:
+## Joining
 
-`final_time = custom_time`
+A player:
+- must join while the quiz is PUBLISHED
+- must join before the overall quiz expiry
+- can join only once per quiz
 
-Otherwise:
+The first successful join changes the quiz to ACTIVE.
 
-`final_time = automatic_time`
+## Submission
 
-Publishing freezes these values.
+A player:
+- must have joined the quiz
+- must submit while the question is ACTIVE
+- must submit by the authoritative contract deadline
+- may submit only once per question
 
-## Publication rule
+The contract stores:
+- answer
+- submitted timestamp
+- response time in seconds
 
-A quiz cannot publish until its required number of questions exists.
+The frontend timestamp is not authoritative.
 
-After publication:
-- quiz configuration is frozen
-- question text is frozen
-- answer commitment is frozen
-- evaluation criteria are frozen
-- final timing is frozen
+## Question timing
 
-## Security note
+At question start:
 
-The answer is represented by a commitment rather than plaintext in the active
-question state. The next implementation phase must add a cryptographically
-verified reveal path. We will not treat an unverified plaintext reveal as
-production-safe.
+question_deadline = question_start + final_time
 
-## Next implementation phase
+The deadline is capped at the quiz's overall expiry.
 
-1. Cryptographic commitment/reveal
-2. Player registration
-3. Submission deadlines
-4. Duplicate-submission prevention
-5. Question closure
-6. Master-answer reveal
-7. GenLayer semantic evaluation using the Equivalence Principle
-8. 60% correctness threshold
+## Closure
+
+The Quiz Master closes the question after its deadline.
+
+Phase 2 does not yet include automatic state transitions caused by a background
+worker. The state transition is explicit and deterministic.
+
+## Answer reveal
+
+The Quiz Master supplies:
+- plaintext master answer
+- secret salt
+
+The contract recomputes SHA-256(answer + ":" + salt) and requires it to equal
+the stored commitment.
+
+Only after successful verification is the answer stored as revealed and made
+available through get_revealed_answer().
+
+## Security boundary
+
+During an active question, the public question view exposes the commitment
+and question metadata but not the plaintext master answer.
+
+The commitment must be generated from a sufficiently secret salt. The
+production frontend must never expose the salt before reveal.
+
+## Phase 3
+
+Phase 3 will add GenLayer semantic evaluation using the Equivalence Principle.
+The non-deterministic evaluation will be isolated from deterministic storage
+writes, consistent with GenLayer's current execution model.
