@@ -31,7 +31,7 @@ Each validator independently evaluates the same answer.
 
 Validators must:
 1. receive a valid 0–100 integer score;
-2. agree with the leader on which side of the 60% correctness boundary the
+2. agree with the leader on which side of the answer-mode-specific correctness boundary the
    answer belongs;
 3. differ from the leader by no more than 5 score points.
 
@@ -51,17 +51,25 @@ contract code write:
 - correctness
 - evaluation status
 
-Correctness is then:
+Correctness is then selected from the frozen answer mode:
+
+For TEXT answers:
 
 `semantic_score >= 60 -> correct`
 
 `semantic_score < 60 -> wrong`
 
+For NUMERIC answers:
+
+`semantic_score >= 90 -> correct`
+
+`semantic_score < 90 -> wrong`
+
 The frontend cannot override this result.
 
 ## Important boundary
 
-The 60% threshold is an application rule belonging to Quizambig. It is not a
+The 60% text / 90% numeric thresholds is an application rule belonging to Quizambig. It is not a
 GenLayer protocol-wide threshold. The Equivalence Principle defines how
 validators accept the non-deterministic evaluation; Quizambig's deterministic
 code applies the 60% rule afterward. citeturn0search0turn0search1
@@ -91,3 +99,22 @@ Next:
 - define the final pending-evaluation lifecycle
 - connect semantic results to speed-aware scoring
 - build the per-quiz leaderboard
+
+
+## Answer mode and thresholds
+
+Each published question has an immutable answer mode:
+
+- `TEXT`: 60% semantic-score threshold.
+- `NUMERIC`: 90% semantic-score threshold.
+
+The mode is supplied when the question is created and is bound into the
+master-answer commitment. It cannot be changed after publication.
+
+For numeric questions, GenLayer is instructed to recognize equivalent numeric
+forms, including number words. For example, for `2 + 2`, a master answer of
+`4` can semantically match `four`. A numerically close but materially
+different value must meet the stricter 90% threshold.
+
+The 10-second frontend evaluation threshold remains a UX threshold only; it
+does not cancel or invalidate GenLayer evaluation.
