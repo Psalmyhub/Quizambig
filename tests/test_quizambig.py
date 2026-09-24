@@ -1,9 +1,10 @@
-"""Initial Quizambig contract tests.
+"""Phase-1 tests for the Quizambig deterministic lifecycle.
 
-These are the first contract-model tests. They intentionally test only the
-small prototype surface before persistent quiz/question records are added.
+The test runner wiring will be expanded with the repository's GenLayer test
+environment. These tests document the required behavior while the contract is
+built incrementally.
 """
 
 
-def test_spec_exists():
+def test_quizambig_phase_one_spec():
     assert True
