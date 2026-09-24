@@ -1,89 +1,93 @@
-# Quizambig Phase 2 — Player Submission and Answer Protection
+# Quizambig Phase 3 — GenLayer Semantic Evaluation
 
-Phase 2 adds the authoritative player/question flow while keeping semantic
-evaluation for Phase 3.
+Phase 3 makes GenLayer the authoritative semantic-evaluation layer.
 
-## Commitment format
+## Evaluation input
 
-The Quiz Master creates a commitment off-chain:
+GenLayer receives:
+- the protected master answer after verified reveal
+- the player's submitted answer
+- the Quiz Master's evaluation criteria
 
-SHA-256(UTF-8(answer + ":" + salt))
+The prompt explicitly treats those fields as untrusted quiz data so text inside
+an answer cannot become an instruction to the evaluator.
 
-The contract stores only the 64-character lowercase hexadecimal digest.
+## Output
 
-The plaintext master answer is not stored while the question is active.
+The non-deterministic evaluator returns:
 
-## Player flow
+`semantic_score`: integer from 0 through 100
 
-PUBLISHED
--> join_quiz()
--> ACTIVE
--> start_question()
--> submit_answer()
--> close_question()
--> reveal_master_answer()
+A short explanation is also requested for diagnostics, but the explanation is
+not part of the consensus decision.
 
-## Joining
+## Equivalence Principle
 
-A player:
-- must join while the quiz is PUBLISHED
-- must join before the overall quiz expiry
-- can join only once per quiz
+Quizambig uses a custom leader/validator pattern.
 
-The first successful join changes the quiz to ACTIVE.
+The leader independently evaluates the answer.
 
-## Submission
+Each validator independently evaluates the same answer.
 
-A player:
-- must have joined the quiz
-- must submit while the question is ACTIVE
-- must submit by the authoritative contract deadline
-- may submit only once per question
+Validators must:
+1. receive a valid 0–100 integer score;
+2. agree with the leader on which side of the 60% correctness boundary the
+   answer belongs;
+3. differ from the leader by no more than 5 score points.
 
-The contract stores:
-- answer
-- submitted timestamp
-- response time in seconds
+This prevents a tolerance window from converting a 59% answer into a 60% answer
+or vice versa.
 
-The frontend timestamp is not authoritative.
+GenLayer's current documentation recommends custom validator logic for
+non-deterministic LLM scoring and specifically describes absolute score
+tolerance as an appropriate pattern for LLM-generated scores. citeturn1search0turn1search1
 
-## Question timing
+## Deterministic result
 
-At question start:
+Only after the Equivalence Principle accepts the result does deterministic
+contract code write:
 
-question_deadline = question_start + final_time
+- semantic score
+- correctness
+- evaluation status
 
-The deadline is capped at the quiz's overall expiry.
+Correctness is then:
 
-## Closure
+`semantic_score >= 60 -> correct`
 
-The Quiz Master closes the question after its deadline.
+`semantic_score < 60 -> wrong`
 
-Phase 2 does not yet include automatic state transitions caused by a background
-worker. The state transition is explicit and deterministic.
+The frontend cannot override this result.
 
-## Answer reveal
+## Important boundary
 
-The Quiz Master supplies:
-- plaintext master answer
-- secret salt
+The 60% threshold is an application rule belonging to Quizambig. It is not a
+GenLayer protocol-wide threshold. The Equivalence Principle defines how
+validators accept the non-deterministic evaluation; Quizambig's deterministic
+code applies the 60% rule afterward. citeturn0search0turn0search1
 
-The contract recomputes SHA-256(answer + ":" + salt) and requires it to equal
-the stored commitment.
+## Deterministic storage
 
-Only after successful verification is the answer stored as revealed and made
-available through get_revealed_answer().
+No contract storage is mutated inside the non-deterministic leader/validator
+functions. Storage is updated only after the accepted result returns to the
+deterministic contract path, consistent with GenLayer's current execution
+rules. citeturn1search4
 
-## Security boundary
+## Phase 3 status
 
-During an active question, the public question view exposes the commitment
-and question metadata but not the plaintext master answer.
+Implemented:
+- evaluation state
+- semantic score storage
+- 60% correctness threshold
+- custom Equivalence Principle validator
+- score tolerance
+- correctness-boundary protection
+- deterministic result persistence
+- evaluation read methods
 
-The commitment must be generated from a sufficiently secret salt. The
-production frontend must never expose the salt before reveal.
-
-## Phase 3
-
-Phase 3 will add GenLayer semantic evaluation using the Equivalence Principle.
-The non-deterministic evaluation will be isolated from deterministic storage
-writes, consistent with GenLayer's current execution model.
+Next:
+- execute the full GenLayer test suite
+- test validator disagreement and retries
+- define the final pending-evaluation lifecycle
+- connect semantic results to speed-aware scoring
+- build the per-quiz leaderboard
