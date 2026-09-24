@@ -24,12 +24,13 @@ class Quizambig(gl.Contract):
     quiz_question_count: TreeMap[str, u32]
     quiz_overall_duration: TreeMap[str, u64]
     quiz_created_at: TreeMap[str, u64]
-    quiz_published_at: TreeMap[str, u64>
+    quiz_published_at: TreeMap[str, u64]
     quiz_status: TreeMap[str, str]
 
     question_quiz_id: TreeMap[str, str]
     question_text: TreeMap[str, str]
     question_answer_commitment: TreeMap[str, str]
+    question_answer_mode: TreeMap[str, str]
     question_answer_length: TreeMap[str, u32]
     question_criteria: TreeMap[str, str]
     question_automatic_time: TreeMap[str, u32]
@@ -87,8 +88,8 @@ class Quizambig(gl.Contract):
         quiz_key = self._quiz_key(quiz_id)
         return self.quiz_published_at[quiz_key] + self.quiz_overall_duration[quiz_key]
 
-    def _answer_commitment(self, answer: str, salt: str) -> str:
-        payload = (answer + ":" + salt).encode("utf-8")
+    def _answer_commitment(self, answer: str, salt: str, answer_mode: str) -> str:
+        payload = (answer + ":" + salt + ":" + answer_mode).encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
 
     def _evaluation_key(self, question_id: u32, player: Address) -> str:
@@ -128,6 +129,7 @@ class Quizambig(gl.Contract):
             "quiz_id": self.question_quiz_id[key],
             "question_text": self.question_text[key],
             "answer_length": self.question_answer_length[key],
+            "answer_mode": self.question_answer_mode[key],
             "automatic_time": self.question_automatic_time[key],
             "custom_time": self.question_custom_time[key],
             "has_custom_time": self.question_has_custom_time[key],
@@ -216,6 +218,7 @@ class Quizambig(gl.Contract):
         question_text: str,
         answer_commitment: str,
         answer_length: u32,
+        answer_mode: str,
         evaluation_criteria: str,
         custom_time_seconds: u32,
         use_custom_time: bool,
@@ -228,6 +231,7 @@ class Quizambig(gl.Contract):
         assert question_text != "", "question text is required"
         assert len(answer_commitment) == 64, "answer commitment must be a SHA-256 hex digest"
         assert answer_length > 0, "answer length must be greater than zero"
+        assert answer_mode in ("TEXT", "NUMERIC"), "answer_mode must be TEXT or NUMERIC"
         assert evaluation_criteria != "", "evaluation criteria is required"
 
         automatic_time = answer_length
@@ -245,6 +249,7 @@ class Quizambig(gl.Contract):
         self.question_quiz_id[key] = quiz_key
         self.question_text[key] = question_text
         self.question_answer_commitment[key] = answer_commitment.lower()
+        self.question_answer_mode[key] = answer_mode
         self.question_answer_length[key] = answer_length
         self.question_criteria[key] = evaluation_criteria
         self.question_automatic_time[key] = automatic_time
@@ -374,7 +379,8 @@ class Quizambig(gl.Contract):
         assert not self.question_revealed[question_key], "master answer is already revealed"
 
         expected = self.question_answer_commitment[question_key]
-        actual = self._answer_commitment(answer, salt)
+        answer_mode = self.question_answer_mode[question_key]
+        actual = self._answer_commitment(answer, salt, answer_mode)
         assert actual == expected, "master answer does not match commitment"
 
         self.question_revealed_answer[question_key] = answer
@@ -396,6 +402,8 @@ class Quizambig(gl.Contract):
         player_answer = self.submission_answer[submission_key]
         master_answer = self.question_revealed_answer[question_key]
         criteria = self.question_criteria[question_key]
+        answer_mode = self.question_answer_mode[question_key]
+        correctness_threshold = 90 if answer_mode == "NUMERIC" else 60
 
         evaluation_prompt = f"""
 You are evaluating a free-text quiz answer.
@@ -424,6 +432,11 @@ Score the player's answer from 0 to 100 according to how well it expresses
 the meaning required by the master answer and evaluation criteria.
 
 Important:
+- answer mode is authoritative: {answer_mode};
+- for TEXT answers, semantic correctness uses a 60% threshold;
+- for NUMERIC answers, semantic correctness uses a 90% threshold;
+- for NUMERIC answers, equivalent numeric forms and number words (for example,
+  4 and four) can receive a high score when they represent the same value;
 - equivalent wording, synonyms, grammar differences, and different sentence
   structure can receive a high score;
 - an answer that changes the essential meaning must receive a lower score;
@@ -482,9 +495,9 @@ Return JSON only with:
             if validator_score < 0 or validator_score > 100:
                 return False
 
-            # The 60% correctness boundary is authoritative. Validators must
-            # agree on which side of the boundary the answer belongs to.
-            if (leader_score >= 60) != (validator_score >= 60):
+            # The answer-mode-specific correctness boundary is authoritative.
+            # Validators must agree on which side of that boundary the answer belongs to.
+            if (leader_score >= correctness_threshold) != (validator_score >= correctness_threshold):
                 return False
 
             # LLM scoring is inherently non-deterministic. Allow a narrow
@@ -498,5 +511,5 @@ Return JSON only with:
         assert 0 <= accepted_score <= 100
 
         self.semantic_score[submission_key] = accepted_score
-        self.evaluation_correct[submission_key] = accepted_score >= 60
+        self.evaluation_correct[submission_key] = accepted_score >= correctness_threshold
         self.evaluation_status[submission_key] = "FINALIZED"
