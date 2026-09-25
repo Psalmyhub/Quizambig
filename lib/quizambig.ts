@@ -79,7 +79,7 @@ export function generateSalt() {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function getNextQuizId() {
+export async function getNextQuestionId() { return Number(await readClient().readContract({address:QUIZAMBIG_CONTRACT_ADDRESS,functionName:"get_next_question_id",args:[]})); }\n\nexport async function getNextQuizId() {
   return Number(await readClient().readContract({address:QUIZAMBIG_CONTRACT_ADDRESS,functionName:"get_next_quiz_id",args:[]}));
 }
 export async function getQuiz(id:number):Promise<Quiz> {
