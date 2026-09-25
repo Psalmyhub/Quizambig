@@ -1,5 +1,6 @@
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
+import { TransactionStatus } from "genlayer-js/types";
 
 export const QUIZAMBIG_CONTRACT_ADDRESS = "0xC57Ac7ACF54bB4D4761Ff7150F455E190cc113E3" as const;
 export const QUIZAMBIG_OWNER = "0xB41f7CcF919515a4741C7AAd43cFfCd56A20Ee31" as const;
@@ -174,20 +175,16 @@ export async function getEvaluation(questionId: number, player: `0x${string}`) {
 async function write(functionName: string, args: unknown[]) {
   const account = await walletAddress();
   const client = writeClient(account);
-  const call = {
+  const hash = await client.writeContract({
     address: QUIZAMBIG_CONTRACT_ADDRESS,
     functionName,
     args,
-  };
-  const estimate = await client.estimateTransactionFeesForWrite(call);
-  const hash = await client.writeContract({
-    ...call,
-    fees: {
-      distribution: estimate.distribution,
-      feeValue: estimate.feeValue,
-    },
+    value: 0n,
   });
-  await client.waitForDecision({ hash });
+  await client.waitForTransactionReceipt({
+    hash,
+    status: TransactionStatus.FINALIZED,
+  });
   return hash;
 }
 
