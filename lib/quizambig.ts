@@ -181,10 +181,17 @@ async function write(functionName: string, args: any[]) {
     args,
     value: 0n,
   });
-  await client.waitForTransactionReceipt({
+  const receipt = await client.waitForTransactionReceipt({
     hash,
-    status: TransactionStatus.FINALIZED,
+    status: TransactionStatus.ACCEPTED,
   });
+
+  if (receipt.txExecutionResultName !== "FINISHED_WITH_RETURN") {
+    throw new Error(
+      `GenLayer transaction was accepted but contract execution did not succeed: ${receipt.txExecutionResultName ?? "unknown"}`,
+    );
+  }
+
   return hash;
 }
 
