@@ -42,6 +42,43 @@ function writeClient(account:`0x${string}`) {
 
 export const connectWallet = walletAddress;
 
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function createQuiz(title:string, description:string, questionCount:number, overallDurationSeconds:number) {
+  return write("create_quiz",[title,description,questionCount,overallDurationSeconds]);
+}
+
+export async function addQuestion(
+  quizId:number,
+  questionText:string,
+  masterAnswer:string,
+  salt:string,
+  answerMode:"TEXT"|"NUMERIC",
+  evaluationCriteria:string,
+  customTimeSeconds:number,
+  useCustomTime:boolean,
+) {
+  const commitment = await sha256Hex(`${masterAnswer}:${salt}:${answerMode}`);
+  return write("add_question",[
+    quizId, questionText, commitment, masterAnswer.length, answerMode,
+    evaluationCriteria, customTimeSeconds, useCustomTime,
+  ]);
+}
+
+export async function publishQuiz(quizId:number) {
+  return write("publish_quiz",[quizId]);
+}
+
+export function generateSalt() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function getNextQuizId() {
   return Number(await readClient().readContract({address:QUIZAMBIG_CONTRACT_ADDRESS,functionName:"get_next_quiz_id",args:[]}));
 }
