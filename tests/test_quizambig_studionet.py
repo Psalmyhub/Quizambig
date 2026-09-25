@@ -27,7 +27,8 @@ def test_quizambig_full_lifecycle_on_studionet(
     master = default_account
     player = accounts[1]
 
-    factory = get_contract_factory(contract_file_path="contracts/quizambig.py")
+    # get_contract_factory resolves contract_file_path relative to contracts/.
+    factory = get_contract_factory(contract_file_path="quizambig.py")
     contract = factory.deploy(account=master)
 
     master_view = contract
