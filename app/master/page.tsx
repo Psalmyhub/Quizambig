@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect,useState } from "react";
 import { addQuestion,connectWallet,createQuiz,generateSalt,getNextQuizId,getQuiz,publishQuiz,type Quiz } from "../../lib/quizambig";
 
-type DraftQuestion={text:string;answer:string;mode:"TEXT"|"NUMERIC";criteria:string;customTime:string;useCustom:boolean};
+type DraftQuestion={text:string;answer:string;salt:string;mode:"TEXT"|"NUMERIC";criteria:string;customTime:string;useCustom:boolean};
 
 export default function MasterPage(){
   const [wallet,setWallet]=useState("");
@@ -12,7 +12,7 @@ export default function MasterPage(){
   const [title,setTitle]=useState(""); const [description,setDescription]=useState("");
   const [count,setCount]=useState("1"); const [duration,setDuration]=useState("300");
   const [questions,setQuestions]=useState<DraftQuestion[]>([]);
-  const [q,setQ]=useState<DraftQuestion>({text:"",answer:"",mode:"TEXT",criteria:"",customTime:"",useCustom:false});
+  const [q,setQ]=useState<DraftQuestion>({text:"",answer:"",salt:"",mode:"TEXT",criteria:"",customTime:"",useCustom:false});
   const [busy,setBusy]=useState(false); const [message,setMessage]=useState(""); const [error,setError]=useState("");
 
   async function connect(){try{setWallet(await connectWallet());}catch(e){setError(e instanceof Error?e.message:String(e));}}
@@ -30,8 +30,8 @@ export default function MasterPage(){
     try{
       if(!q.text.trim()||!q.answer.trim()||!q.criteria.trim())throw new Error("Question, master answer, and evaluation criteria are required.");
       const salt=generateSalt();
-      await addQuestion(quiz.id,q.text.trim(),q.answer,q.mode,q.criteria.trim(),Number(q.customTime||0),q.useCustom);
-      setQuestions([...questions,q]);setQ({text:"",answer:"",mode:"TEXT",criteria:"",customTime:"",useCustom:false});
+      const salt=generateSalt();\n      await addQuestion(quiz.id,q.text.trim(),q.answer,salt,q.mode,q.criteria.trim(),Number(q.customTime||0),q.useCustom);
+      setQuestions([...questions,{...q,salt}]);setQ({text:"",answer:"",salt:"",mode:"TEXT",criteria:"",customTime:"",useCustom:false});
       setMessage("Question committed on-chain. Keep the generated salt with the master answer; it is required for later reveal.");
     }catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}
   }
