@@ -172,7 +172,7 @@ export async function getEvaluation(questionId: number, player: `0x${string}`) {
   })) as Evaluation;
 }
 
-async function write(functionName: string, args: unknown[]) {
+async function write(functionName: string, args: any[]) {
   const account = await walletAddress();
   const client = writeClient(account);
   const hash = await client.writeContract({
