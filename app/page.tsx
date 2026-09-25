@@ -1,17 +1,152 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect,useState } from "react";
-import { connectWallet,getNextQuizId,getQuiz,QUIZAMBIG_CONTRACT_ADDRESS,type Quiz } from "../lib/quizambig";
+import { useEffect, useState } from "react";
+import {
+  connectWallet,
+  getNextQuizId,
+  getQuiz,
+  QUIZAMBIG_CONTRACT_ADDRESS,
+  type Quiz,
+} from "../lib/quizambig";
 
 export default function HomePage() {
-  const [wallet,setWallet]=useState(""); const [quizzes,setQuizzes]=useState<Quiz[]>([]);
-  const [loading,setLoading]=useState(true); const [error,setError]=useState("");
-  async function load(){setLoading(true);setError("");try{const next=await getNextQuizId();const rows:Quiz[]=[];for(let id=1;id<next;id++){try{rows.push(await getQuiz(id));}catch{}}setQuizzes(rows.reverse());}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setLoading(false);}}
-  useEffect(()=>{void load();},[]);
-  async function connect(){try{setWallet(await connectWallet());}catch(e){setError(e instanceof Error?e.message:String(e));}}
-  const published=quizzes.filter(q=>q.status==="PUBLISHED"||q.status==="ACTIVE");
-  return <main className="shell"><nav className="nav"><Link className="brand" href="/">Quizambig</Link><div className="navRight">{wallet&&<span className="wallet">{wallet.slice(0,6)}…{wallet.slice(-4)}</span>}<button className="primary" onClick={connect}>Connect wallet</button></div></nav>
-    <section className="hero"><div className="eyebrow">Semantic quiz · GenLayer</div><h1>Answer naturally. Let GenLayer judge meaning.</h1><p>Quizambig stores quiz state on-chain and uses GenLayer consensus for semantic evaluation. The frontend displays contract results; it does not decide correctness.</p><div className="actions"><button className="secondary" onClick={()=>void load()}>Refresh</button><span className="small">Contract: {QUIZAMBIG_CONTRACT_ADDRESS}</span></div></section>
-    {error&&<div className="error">{error}</div>}<section className="section"><h2>Published quizzes</h2>{loading?<p className="muted">Reading Studionet…</p>:<div className="grid">{published.map(q=><article className="card" key={q.id}><h3>{q.title||"Untitled quiz"}</h3><p className="muted">{q.description||"No description."}</p><div className="meta"><span className="badge">{q.question_count} questions</span><span className="badge">{q.overall_duration_seconds}s total</span><span className="badge">{q.status}</span></div><Link className="primary" href={"/quiz/"+q.id}>Open quiz</Link></article>)}</div>}{!loading&&!published.length&&<p className="muted">No published quizzes are available yet.</p>}</section></main>;
+  const [wallet, setWallet] = useState("");
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const next = await getNextQuizId();
+      const rows: Quiz[] = [];
+
+      for (let id = 1; id < next; id++) {
+        try {
+          rows.push(await getQuiz(id));
+        } catch {}
+      }
+
+      setQuizzes(rows.reverse());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function connect() {
+    try {
+      setWallet(await connectWallet());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const published = quizzes.filter(
+    (q) => q.status === "PUBLISHED" || q.status === "ACTIVE",
+  );
+
+  return (
+    <main className="shell">
+      <nav className="nav">
+        <Link className="brand" href="/">
+          Quizambig
+        </Link>
+
+        <div className="navRight">
+          <Link className="secondary" href="/master">
+            Quiz Master
+          </Link>
+
+          {wallet && (
+            <span className="wallet">
+              {wallet.slice(0, 6)}…{wallet.slice(-4)}
+            </span>
+          )}
+
+          <button className="primary" onClick={connect}>
+            {wallet ? "Wallet connected" : "Connect wallet"}
+          </button>
+        </div>
+      </nav>
+
+      <section className="hero">
+        <div className="eyebrow">Semantic quiz · GenLayer</div>
+
+        <h1>Answer naturally. Let GenLayer judge meaning.</h1>
+
+        <p>
+          Quizambig stores quiz state on-chain and uses GenLayer consensus for
+          semantic evaluation. The frontend displays contract results; it does
+          not decide correctness.
+        </p>
+
+        <div className="actions">
+          <button className="secondary" onClick={() => void load()}>
+            Refresh
+          </button>
+
+          <Link className="primary" href="/master">
+            Create a quiz
+          </Link>
+
+          <span className="small">
+            Contract: {QUIZAMBIG_CONTRACT_ADDRESS}
+          </span>
+        </div>
+      </section>
+
+      {error && <div className="error">{error}</div>}
+
+      <section className="section">
+        <h2>Published quizzes</h2>
+
+        {loading ? (
+          <p className="muted">Reading Studionet…</p>
+        ) : (
+          <div className="grid">
+            {published.map((q) => (
+              <article className="card" key={q.id}>
+                <h3>{q.title || "Untitled quiz"}</h3>
+
+                <p className="muted">
+                  {q.description || "No description."}
+                </p>
+
+                <div className="meta">
+                  <span className="badge">
+                    {q.question_count} questions
+                  </span>
+
+                  <span className="badge">
+                    {q.overall_duration_seconds}s total
+                  </span>
+
+                  <span className="badge">{q.status}</span>
+                </div>
+
+                <Link className="primary" href={"/quiz/" + q.id}>
+                  Open quiz
+                </Link>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {!loading && !published.length && (
+          <p className="muted">
+            No published quizzes are available yet.
+          </p>
+        )}
+      </section>
+    </main>
+  );
 }
