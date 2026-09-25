@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect,useState } from "react";
-import { addQuestion,connectWallet,createQuiz,generateSalt,getNextQuizId,getQuiz,publishQuiz,type Quiz } from "../../lib/quizambig";
+import { addQuestion,closeQuestion,connectWallet,createQuiz,evaluateSubmission,generateSalt,getNextQuestionId,getNextQuizId,getQuestion,getQuiz,publishQuiz,revealMasterAnswer,startQuestion,type Quiz } from "../../lib/quizambig";
 
 type DraftQuestion={text:string;answer:string;salt:string;mode:"TEXT"|"NUMERIC";criteria:string;customTime:string;useCustom:boolean};
 
@@ -13,7 +13,7 @@ export default function MasterPage(){
   const [count,setCount]=useState("1"); const [duration,setDuration]=useState("300");
   const [questions,setQuestions]=useState<DraftQuestion[]>([]);
   const [q,setQ]=useState<DraftQuestion>({text:"",answer:"",salt:"",mode:"TEXT",criteria:"",customTime:"",useCustom:false});
-  const [busy,setBusy]=useState(false); const [message,setMessage]=useState(""); const [error,setError]=useState("");
+  const [activeQuestion,setActiveQuestion]=useState<import("../../lib/quizambig").Question|null>(null);\n  const [masterAnswer,setMasterAnswer]=useState("");\n  const [masterSalt,setMasterSalt]=useState("");\n  const [player,setPlayer]=useState("");\n  const [busy,setBusy]=useState(false); const [message,setMessage]=useState(""); const [error,setError]=useState("");
 
   async function connect(){try{setWallet(await connectWallet());}catch(e){setError(e instanceof Error?e.message:String(e));}}
   async function create(){
@@ -33,6 +33,34 @@ export default function MasterPage(){
       const salt=generateSalt();\n      await addQuestion(quiz.id,q.text.trim(),q.answer,salt,q.mode,q.criteria.trim(),Number(q.customTime||0),q.useCustom);
       setQuestions([...questions,{...q,salt}]);setQ({text:"",answer:"",salt:"",mode:"TEXT",criteria:"",customTime:"",useCustom:false});
       setMessage("Question committed on-chain. Keep the generated salt with the master answer; it is required for later reveal.");
+    }catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}
+  }
+  async function loadActiveQuestion(){
+    if(!quiz)return;
+    setBusy(true);setError("");
+    try{
+      const next=await getNextQuestionId();
+      for(let id=1;id<next;id++){
+        try{const candidate=await getQuestion(id);if(Number(candidate.quiz_id)===quiz.id){setActiveQuestion(candidate);return;}}catch{}
+      }
+      throw new Error("No question found for this quiz.");
+    }catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}
+  }
+  async function masterAction(action:"start"|"close"|"reveal"|"evaluate"){
+    if(!activeQuestion)return;setBusy(true);setError("");setMessage("");
+    try{
+      if(action==="start") await startQuestion(activeQuestion.id);
+      if(action==="close") await closeQuestion(activeQuestion.id);
+      if(action==="reveal"){
+        if(!masterAnswer.trim()||!masterSalt.trim()) throw new Error("Master answer and original salt are required for verified reveal.");
+        await revealMasterAnswer(activeQuestion.id,masterAnswer,masterSalt);
+      }
+      if(action==="evaluate"){
+        if(!player.trim()) throw new Error("Enter the player's wallet address.");
+        await evaluateSubmission(activeQuestion.id,player.trim() as `0x${string}`);
+      }
+      await loadActiveQuestion();
+      setMessage("Transaction confirmed by GenLayer.");
     }catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}
   }
   async function publish(){
@@ -63,7 +91,7 @@ export default function MasterPage(){
         <div className="section"><h3>Added this session: {questions.length}/{quiz.question_count}</h3>{questions.map((x,i)=><div className="card" key={i}><strong>Q{i+1}: {x.text}</strong><div className="meta"><span className="badge">{x.mode}</span><span className="badge">{x.useCustom?x.customTime:"automatic"} seconds</span></div></div>)}</div>
         {questions.length===quiz.question_count&&<button className="primary" disabled={busy} onClick={publish}>Publish quiz</button>}
       </section>}
-      {quiz.status==="PUBLISHED"&&<section className="section card"><h2>Published</h2><p className="muted">The quiz is frozen. Players can now join it.</p><Link className="primary" href={"/quiz/"+quiz.id}>Open player view</Link></section>}
+      {quiz.status==="PUBLISHED"&&<section className="section card"><h2>Control panel</h2><p className="muted">Load a question to manage its on-chain lifecycle. Master answer verification happens on-chain; the frontend never decides correctness.</p><button className="secondary" disabled={busy} onClick={loadActiveQuestion}>Load question</button>{activeQuestion&&<div className="section"><div className="meta"><span className="badge">Question #{activeQuestion.id}</span><span className="badge">{activeQuestion.status}</span><span className="badge">{activeQuestion.final_time}s</span>{activeQuestion.answer_revealed&&<span className="badge">Answer revealed</span>}</div><div className="question">{activeQuestion.question_text}</div>{activeQuestion.status==="PUBLISHED"&&<button className="primary" disabled={busy} onClick={()=>void masterAction("start")}>Start question</button>}{activeQuestion.status==="ACTIVE"&&<button className="primary" disabled={busy} onClick={()=>void masterAction("close")}>Close question</button>}{activeQuestion.status==="CLOSED"&&!activeQuestion.answer_revealed&&<><div className="field"><label>Master answer</label><input value={masterAnswer} onChange={e=>setMasterAnswer(e.target.value)} /></div><div className="field"><label>Original salt</label><input value={masterSalt} onChange={e=>setMasterSalt(e.target.value)} /></div><button className="primary" disabled={busy} onClick={()=>void masterAction("reveal")}>Verify & reveal answer</button></>}{activeQuestion.answer_revealed&&<><div className="field"><label>Player wallet to evaluate</label><input value={player} onChange={e=>setPlayer(e.target.value)} placeholder="0x…" /></div><button className="primary" disabled={busy||!player.trim()} onClick={()=>void masterAction("evaluate")}>Run GenLayer evaluation</button></>}</div>}<div className="actions"><Link className="secondary" href={"/quiz/"+quiz.id}>Open player view</Link></div></section>}
     </>}
   </main>;
 }
