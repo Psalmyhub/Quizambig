@@ -30,9 +30,15 @@ def make_commitment(answer: str, salt: str, answer_mode: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+EXPECTED_OWNER = "0xB41f7CcF919515a4741C7AAd43cFfCd56A20Ee31"
+
+
 def assert_success(receipt, step: str):
-    """Fail immediately with a useful step name if a Studionet tx fails."""
-    assert tx_execution_succeeded(receipt), f"Studionet transaction failed: {step}"
+    """Fail with the actual GenLayer receipt details when a tx fails."""
+    if not tx_execution_succeeded(receipt):
+        print(f"\n[FAIL] {step}")
+        print("TRANSACTION RECEIPT:", receipt)
+        raise AssertionError(f"Studionet transaction failed: {step}")
     print(f"[PASS] {step}")
 
 
@@ -46,10 +52,27 @@ def test_quizambig_full_lifecycle_on_studionet(
         "Studionet test requires at least two configured accounts"
     )
 
-    master = default_account
-    player = accounts[1]
+    # Never allow gltest's default account to silently become the Quiz Master.
+    # The expected owner/deployer address is a hard safety invariant.
+    matching_accounts = [
+        account for account in accounts
+        if account.address.lower() == EXPECTED_OWNER.lower()
+    ]
+    assert matching_accounts, (
+        "EXPECTED_OWNER is not configured in the selected Studionet accounts: "
+        f"{EXPECTED_OWNER}. Refusing to deploy with an unexpected wallet."
+    )
+
+    master = matching_accounts[0]
+    player_candidates = [
+        account for account in accounts
+        if account.address.lower() != master.address.lower()
+    ]
+    assert player_candidates, "No separate Studionet player account is configured"
+    player = player_candidates[0]
 
     print("\n===== QUIZAMBIG STUDIONET LIVE TEST =====")
+    print("EXPECTED OWNER:", EXPECTED_OWNER)
     print("DEPLOYER / MASTER:", master.address)
     print("PLAYER:", player.address)
 
@@ -63,6 +86,7 @@ def test_quizambig_full_lifecycle_on_studionet(
         consensus_max_rotations=5,
     )
 
+    assert master.address.lower() == EXPECTED_OWNER.lower()
     print("DEPLOYED CONTRACT:", contract.address)
 
     master_view = contract
@@ -125,6 +149,11 @@ def test_quizambig_full_lifecycle_on_studionet(
         wait_retries=100,
     )
     assert_success(publish_receipt, "publish_quiz")
+
+    published_quiz = master_view.get_quiz(quiz_id).call()
+    print("PUBLISHED QUIZ:", published_quiz)
+    assert published_quiz["master"].lower() == EXPECTED_OWNER.lower()
+    assert published_quiz["status"] == "PUBLISHED"
 
     join_receipt = player_contract.join_quiz(
         args=[quiz_id]
@@ -196,10 +225,10 @@ def test_quizambig_full_lifecycle_on_studionet(
 
     print("EVALUATION:", evaluation)
 
-    assert evaluation["evaluation_status"] == "FINALIZED"
+    assert evaluation["status"] == "FINALIZED"
     assert isinstance(evaluation["semantic_score"], int)
     assert 0 <= evaluation["semantic_score"] <= 100
-    assert evaluation["evaluation_correct"] is True
+    assert evaluation["correct"] is True
 
     print("[PASS] FINALIZED semantic evaluation")
     print("===== QUIZAMBIG STUDIONET TEST COMPLETE =====\n")
